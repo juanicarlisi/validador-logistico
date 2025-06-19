@@ -2,4 +2,4 @@ streamlit
 pandas
 openpyxl
 tabulate
-openai
+openai>=1.0.0
