@@ -1,73 +1,71 @@
 import streamlit as st
 import pandas as pd
-import re
+import openai
+import os
 
-st.title("📦 Validador de archivos logísticos")
+st.set_page_config(page_title="Validador inteligente", layout="wide")
+st.title("📦 Validador inteligente de formularios logísticos")
 
-uploaded_file = st.file_uploader("Subí el archivo Excel", type=["xls", "xlsx"])
+openai_api_key = st.text_input("🔑 Ingresá tu OpenAI API Key:", type="password")
 
-if uploaded_file is not None:
+uploaded_file = st.file_uploader("📄 Subí el formulario Excel", type=["xlsx", "xls"])
+
+if uploaded_file and openai_api_key:
     df = pd.read_excel(uploaded_file, header=None).fillna('')
-    df.columns = range(df.shape[1])
+    st.write("📋 Vista previa del formulario:")
+    st.dataframe(df)
 
-    campos_clave = {
-        "Cantidad de SKU": ["cantidad de sku"],
-        "Dimensiones": ["dimensiones", "bulto", "pallet"],
-        "Peso": ["peso", "unidad"],
-        "Frecuencia ingreso": ["frecuencia de ingreso", "frecuencia recepción"],
-        "Pedidos por día": ["pedidos por día", "pedidos diarios"],
-        "Volumen por día": ["volumen por día"],
-        "Posiciones pallet": ["posiciones de pallet", "cantidad de posiciones"],
-        "Estantería o m2": ["estantería", "m2", "metros cuadrados"],
-        "Frecuencia distribución": ["frecuencia de distribución", "distribución"]
-    }
+    # Convertimos el dataframe a Markdown (texto plano legible por GPT)
+    tabla_texto = df.to_markdown(index=False)
 
-    def buscar_valor(claves):
-        for i, row in df.iterrows():
-            texto = str(row[1]).lower()
-            for clave in claves:
-                if clave in texto:
-                    for j in [2, 3]:
-                        if j < len(row):
-                            val = str(row[j]).strip()
-                            if val and val.lower() not in ["nan", ""]:
-                                return val
-        return None
+    prompt = f"""
+Actuá como un analista logístico experto. Tenés el siguiente formulario (en formato tabla).
+Tu tarea es:
 
-    faltantes = []
-    valores_encontrados = {}
+1. Extraer los valores de estos campos si están:
+   - Cantidad de SKU
+   - Dimensiones
+   - Peso
+   - Frecuencia de ingreso
+   - Pedidos por día
+   - Volumen por día
+   - Posiciones pallet
+   - Estantería o m2
+   - Frecuencia distribución
 
-    for campo, claves in campos_clave.items():
-        valor = buscar_valor(claves)
-        valores_encontrados[campo] = valor
-        if not valor:
-            faltantes.append(campo)
+2. Decir si alguno falta o no está claro.
 
-    observaciones = []
-    try:
-        vol_diario = float(re.findall(r"\d+", valores_encontrados["Volumen por día"])[0])
-        frecuencia = float(re.findall(r"\d+", valores_encontrados["Frecuencia distribución"])[0])
-        estimado = vol_diario * frecuencia
+3. Evaluar si hay alguna incongruencia, como por ejemplo:
+   - Volumen diario vs. Posiciones
+   - Peso o dimensiones poco realistas
+   - Datos duplicados o inconsistentes
 
-        if valores_encontrados["Posiciones pallet"]:
-            posiciones = float(re.findall(r"\d+", valores_encontrados["Posiciones pallet"])[0])
-            if abs(posiciones - estimado) > 0.3 * estimado:
-                observaciones.append("⚠️ Incongruencia entre volumen diario y posiciones estimadas.")
-    except:
-        observaciones.append("No se pudo evaluar congruencia de volumen.")
+4. Dar un resumen final en lenguaje simple para un comercial.
 
-    st.subheader("📋 Valores encontrados:")
-    st.write(valores_encontrados)
+Tabla:
+{tabla_texto}
 
-    if faltantes:
-        st.subheader("❌ Campos faltantes:")
-        st.write(faltantes)
-    else:
-        st.success("✅ Todos los campos clave fueron identificados.")
+Respondé en forma clara, ordenada y estructurada.
+    """
 
-    if observaciones:
-        st.subheader("⚠️ Observaciones:")
-        for obs in observaciones:
-            st.warning(obs)
-    else:
-        st.success("✅ No se detectaron incongruencias.")
+    with st.spinner("Analizando con GPT..."):
+        try:
+            openai.api_key = openai_api_key
+            response = openai.ChatCompletion.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "Sos un experto en logística y validación de formularios industriales."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1200
+            )
+
+            resultado = response['choices'][0]['message']['content']
+            st.success("✅ Análisis completado")
+            st.markdown("### 🧠 Resultado del análisis:")
+            st.markdown(resultado)
+
+        except Exception as e:
+            st.error(f"Error: {e}")
+
