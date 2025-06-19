@@ -51,17 +51,22 @@ Respondé en forma clara, ordenada y estructurada.
     with st.spinner("Analizando con GPT..."):
         try:
             openai.api_key = openai_api_key
-            response = openai.ChatCompletion.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "Sos un experto en logística y validación de formularios industriales."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,
-                max_tokens=1200
-            )
+            from openai import OpenAI
 
-            resultado = response['choices'][0]['message']['content']
+client = OpenAI(api_key=openai_api_key)
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[
+        {"role": "system", "content": "Sos un experto en logística y validación de formularios industriales."},
+        {"role": "user", "content": prompt}
+    ],
+    temperature=0.3,
+    max_tokens=1200
+)
+
+resultado = response.choices[0].message.content
+
             st.success("✅ Análisis completado")
             st.markdown("### 🧠 Resultado del análisis:")
             st.markdown(resultado)
